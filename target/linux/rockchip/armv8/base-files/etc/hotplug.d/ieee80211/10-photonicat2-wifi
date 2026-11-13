@@ -1,0 +1,20 @@
+#!/bin/sh
+# Photonicat2: expose detected wlan data via /etc/board.json and provision
+# /etc/config/wireless on first boot.
+# wifi-scripts' wifi-detect.uc writes wlan data to /tmp/sysinfo/board.json,
+# but wifi.utils reads /etc/board.json. On this build /etc/board.json is a
+# static file without wlan info, so "wifi config" produces no radios and
+# LuCI hides the Wireless menu. Fix up after each ieee80211 phy add.
+[ "$ACTION" = "add" ] || exit 0
+[ -f /usr/share/hostap/wifi-detect.uc ] || exit 0
+
+ucode /usr/share/hostap/wifi-detect.uc 2>/dev/null
+[ -f /tmp/sysinfo/board.json ] && ln -sf /tmp/sysinfo/board.json /etc/board.json
+
+if [ ! -s /etc/config/wireless ]; then
+	/sbin/wifi config 2>/dev/null
+	ubus call network.wireless retry 2>/dev/null
+	rm -rf /tmp/luci-indexcache* 2>/dev/null
+fi
+
+exit 0

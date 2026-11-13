@@ -1,0 +1,36 @@
+#!/bin/sh
+# Photonicat2: recover 5G dial when qmodem's boot-time scan runs before the
+# qmi_wwan netdev exists (USB hub/onboard-usb-dev timing). Retry every 20s for
+# up to ~180s: start dial when the modem device is present, or rescan USB when
+# no modem section has been created yet.
+(
+	i=0
+	while [ "$i" -lt 9 ]; do
+		i=$((i + 1))
+		sleep 20
+		secs=$(uci show qmodem 2>/dev/null | grep '=modem-device' | cut -d. -f2 | cut -d= -f1)
+		up=0
+		for s in $secs; do
+			if ubus call "network.interface.$s" status 2>/dev/null | grep -q '"up": true'; then
+				up=1
+				break
+			fi
+		done
+		[ "$up" = "1" ] && break
+		scanned=0
+		for s in $secs; do
+			p=$(uci -q get "qmodem.$s.path")
+			[ -n "$p" ] || continue
+			[ -d "$p" ] || continue
+			[ "$(uci -q get "qmodem.$s.state")" = "enabled" ] || {
+				uci set "qmodem.$s.state=enabled"
+				uci commit qmodem
+			}
+			/etc/init.d/qmodem_network restart >/dev/null 2>&1
+			scanned=1
+		done
+		[ "$scanned" = "1" ] || /usr/bin/modem_scanc scan usb >/dev/null 2>&1
+	done
+	[ "$up" = "1" ] && logger -t photonicat2-boot "5G dial up after $((i * 20))s"
+) &
+exit 0

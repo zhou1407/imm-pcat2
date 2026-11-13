@@ -1,0 +1,7 @@
+#!/bin/sh
+# LuCI 26 uses ucode; uhttpd's legacy lua_prefix hijacks /cgi-bin/luci and
+# breaks all LuCI pages. Remove it from the runtime config on first boot
+# instead of patching uhttpd's package files.
+uci -q delete uhttpd.@uhttpd[0].lua_prefix
+uci -q commit uhttpd
+exit 0
